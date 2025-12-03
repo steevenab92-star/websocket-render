@@ -20,12 +20,10 @@ wss.on("connection", (ws, req) => {
   ws.on("message", (msg) => {
     console.log("Recibido:", msg.toString());
 
-    // Enviar a todos los clientes conectados
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(msg.toString());
-      }
-    });
+    // 🔥 RESPONDER SOLO AL CLIENTE QUE ENVIÓ EL MENSAJE
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(msg.toString());
+    }
   });
 
   ws.on("close", () => console.log("Cliente desconectado."));
