@@ -5,12 +5,13 @@ import url from "url";
 const server = http.createServer();
 const wss = new WebSocketServer({ server });
 
-const API_KEY = process.env.API_KEY;
+const API_KEY = process.env.API_KEY;  
+const SERVER_KEY = process.env.SERVER_KEY; 
 
 // Almacenar clientes JS por ID
 const jsClients = new Map();
 
-// Almacenar el cliente Python principal
+// Cliente Python principal
 let pythonClient = null;
 
 let nextId = 1;
@@ -18,31 +19,36 @@ let nextId = 1;
 wss.on("connection", (ws, req) => {
   const query = url.parse(req.url, true).query;
 
+  // Validar API_KEY (evita conexiones de desconocidos)
   if (query.key !== API_KEY) {
     ws.close();
     return;
   }
 
-  // Tipo de cliente = JS o PY
+  // Tipo de conexión
   const type = query.type || "js";
-
   if (type === "py") {
-    console.log("Servidor conectado");
+
+    // Validar la clave secreta para Python
+    if (query.server_key !== SERVER_KEY) {
+      console.log("Intento de servidor no autorizado");
+      ws.close();
+      return;
+    }
+
+    console.log("Servidor Python conectado");
     pythonClient = ws;
 
     ws.on("close", () => {
-      console.log("Servidor desconectado");
+      console.log("Servidor Python desconectado");
       pythonClient = null;
     });
 
-    // Python envia respuestas
     ws.on("message", (msg) => {
       try {
         const data = JSON.parse(msg);
 
-        // data.to = ID del cliente JS
         const client = jsClients.get(data.to);
-
         if (client && client.readyState === WebSocket.OPEN) {
           client.send(data.msg);
         }
@@ -54,21 +60,20 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  // -------------------------
+  // -------------------------------------
   // CLIENTE JAVASCRIPT
-  // -------------------------
+  // -------------------------------------
   const clientId = nextId++;
   jsClients.set(clientId, ws);
 
-  console.log("Cliente conectado:", clientId);
+  console.log("Cliente JS conectado:", clientId);
 
   // Enviar ID al cliente JS
   ws.send(JSON.stringify({ id: clientId }));
 
   ws.on("message", (msg) => {
-    console.log("Cliente", clientId, "→ PYTHON:", msg.toString());
+    console.log(`JS ${clientId} → PYTHON:`, msg.toString());
 
-    // Reenviar a Python con el ID del cliente JS
     if (pythonClient && pythonClient.readyState === WebSocket.OPEN) {
       pythonClient.send(JSON.stringify({
         from: clientId,
